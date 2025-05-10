@@ -52,6 +52,10 @@ dependencies: [
 ]
 ```
 
+## Migration
+
+If you're transitioning from Reachability to Reachable, check out the detailed [Migration Guide](https://github.com/afterxleep/Reachable/blob/main/docs/migrate.from.reachability.md) for step-by-step instructions on updating your codebase.
+
 ## Usage
 
 Reachable offers multiple ways to integrate with your app.
