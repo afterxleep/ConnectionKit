@@ -48,7 +48,7 @@ Add Reachable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/Reachable", from: "1.0.0")
+    .package(url: "https://github.com/afterxleep/Reachable", from: "1.0.0")
 ]
 ```
 
