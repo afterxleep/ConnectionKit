@@ -6,15 +6,13 @@ import Network
 #if canImport(Dependencies)
 import Dependencies
 
-/// Extension to support PointFree Dependencies framework
-extension Connectable: DependencyKey {
-    /// Provide a live implementation for dependency injection
-    public static var liveValue: Connectable {
+/// Create a wrapper to act as the DependencyKey
+enum ConnectableKey: DependencyKey {
+    static var liveValue: Connectable {
         Connection()
     }
     
-    /// Provide a test implementation for dependency injection
-    public static var testValue: Connectable {
+    static var testValue: Connectable {
         MockConnection()
     }
 }
@@ -23,8 +21,8 @@ extension Connectable: DependencyKey {
 public extension DependencyValues {
     /// Access the connection monitor through dependency injection
     var connection: Connectable {
-        get { self[Connectable.self] }
-        set { self[Connectable.self] = newValue }
+        get { self[ConnectableKey.self] }
+        set { self[ConnectableKey.self] = newValue }
     }
 }
 #endif 
