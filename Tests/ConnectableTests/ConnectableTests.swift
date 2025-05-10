@@ -9,17 +9,22 @@ final class ConnectableTests: XCTestCase {
     
     private var cancellables = Set<AnyCancellable>()
     
-    func testMockConnectionInitialState() {
+    func testMockConnectionInitialState() async {
         // Given
         let connection = MockConnection(isConnected: true, interfaceType: .wifi)
         
-        // Then
-        XCTAssertTrue(connection.isConnected)
-        XCTAssertEqual(connection.interfaceType, .wifi)
-        XCTAssertTrue(connection.rememberedConnectionState())
+        // Then - get the values first
+        let isConnected = await connection.isConnected
+        let interfaceType = await connection.interfaceType
+        let remembered = await connection.rememberedConnectionState()
+        
+        // Assert on the local variables
+        XCTAssertTrue(isConnected)
+        XCTAssertEqual(interfaceType, .wifi)
+        XCTAssertTrue(remembered)
     }
     
-    func testMockConnectionStateChanges() {
+    func testMockConnectionStateChanges() async {
         // Given
         let connection = MockConnection(isConnected: true, interfaceType: .wifi)
         let expectation = self.expectation(description: "Network status changed")
@@ -37,12 +42,13 @@ final class ConnectableTests: XCTestCase {
         connection.simulateConnection(false)
         
         // Then
-        waitForExpectations(timeout: 1)
-        XCTAssertFalse(connection.isConnected)
+        await fulfillment(of: [expectation], timeout: 1)
+        let isConnected = await connection.isConnected
+        XCTAssertFalse(isConnected)
         XCTAssertEqual(receivedStatus, false)
     }
     
-    func testMockConnectionInterfaceTypeChanges() {
+    func testMockConnectionInterfaceTypeChanges() async {
         // Given
         let connection = MockConnection(isConnected: true, interfaceType: .wifi)
         
@@ -50,7 +56,8 @@ final class ConnectableTests: XCTestCase {
         connection.simulateInterface(.cellular)
         
         // Then
-        XCTAssertEqual(connection.interfaceType, .cellular)
+        let interfaceType = await connection.interfaceType
+        XCTAssertEqual(interfaceType, .cellular)
     }
     
     func testNotificationSent() {
@@ -98,19 +105,21 @@ final class ConnectableTests: XCTestCase {
         NotificationCenter.default.removeObserver(observer)
     }
     
-    func testCustomPersistence() {
+    func testCustomPersistence() async {
         // Given
         let mockMemory = MockConnectionMemory(initialValue: true)
         let connection = Connection(memory: mockMemory)
         
         // Then
-        XCTAssertTrue(connection.rememberedConnectionState())
+        let initialRemembered = await connection.rememberedConnectionState()
+        XCTAssertTrue(initialRemembered)
         
         // When - simulate memory change
         mockMemory.mockState = false
         
         // Then
-        XCTAssertFalse(connection.rememberedConnectionState())
+        let updatedRemembered = await connection.rememberedConnectionState()
+        XCTAssertFalse(updatedRemembered)
     }
 }
 

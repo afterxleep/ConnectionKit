@@ -5,6 +5,13 @@ Connectable is available under the MIT license. See the LICENSE file for more in
 
 Modern Swift network monitoring. Elegant, reactive and testable.
 
+> **Important Note about Async Usage**: 
+> When accessing `isConnected` or `interfaceType` properties:
+> - In regular `Task` blocks: `await` is NOT required
+> - In `Task.detached` blocks: `await` IS required
+> 
+> This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
+
 ## Features
 
 - Elegant network connectivity monitoring
@@ -74,16 +81,29 @@ import Connectable
 // Simple usage - auto-starts monitoring
 let connection = Connection()
 
-// Check connectivity
-if connection.isConnected {
-    print("Connected to the digital world")
-} else {
-    print("Disconnected from the network")
+// Check connectivity inside regular Task - no await needed
+Task {
+    if connection.isConnected {
+        print("Connected to the digital world")
+    } else {
+        print("Disconnected from the network")
+    }
+    
+    // Check connection quality
+    if let interfaceType = connection.interfaceType {
+        print("Connected via \(interfaceType)")
+    }
 }
 
-// Check connection quality
-if let interfaceType = connection.interfaceType {
-    print("Connected via \(interfaceType)")
+// When using Task.detached, await is required
+Task.detached {
+    if await connection.isConnected {
+        print("Connected from detached task")
+    }
+    
+    if let interfaceType = await connection.interfaceType {
+        print("Connected via \(interfaceType)")
+    }
 }
 ```
 
@@ -125,9 +145,18 @@ import Dependencies
 // Access through dependency injection
 @Dependency(\.connection) var connection
 
-// Check connectivity (monitoring already started)
-if connection.isConnected {
-    print("Connected to the world")
+// Check connectivity in standard Task - no await needed
+Task {
+    if connection.isConnected {
+        print("Connected to the world")
+    }
+}
+
+// When using Task.detached, await is required
+Task.detached {
+    if await connection.isConnected {
+        print("Connected from detached task")
+    }
 }
 ```
 
@@ -157,8 +186,8 @@ struct ConnectionAwareView: View {
             Text(isConnected ? "Connected" : "No Connection")
             // ... other UI components
         }
-        .onAppear {
-            // No need to call startMonitoring
+        .task {
+            // Check connection on appear - no await needed in regular Task
             isConnected = connection.isConnected
         }
         .onReceive(connection.statePublisher) { newState in
@@ -178,22 +207,34 @@ import Connectable
 import Dependencies
 
 class YourFeatureTests: XCTestCase {
-    func testOfflineMode() {
+    func testOfflineMode() async {
         let mockConnection = MockConnection(isConnected: false)
         
-        withDependencies {
+        await withDependencies {
             $0.connection = mockConnection
         } operation: {
             let sut = YourFeature()
             
-            // Test offline behavior
-            XCTAssertTrue(sut.isInOfflineMode)
+            // In Task - no await needed
+            Task {
+                let offlineMode = sut.isInOfflineMode
+                XCTAssertTrue(offlineMode)
+            }
+            
+            // In Task.detached - await is required
+            Task.detached {
+                let offlineMode = await sut.isInOfflineMode
+                XCTAssertTrue(offlineMode)
+            }
             
             // Simulate connection recovery
             mockConnection.simulateConnection(true)
             
             // Test online behavior
-            XCTAssertFalse(sut.isInOfflineMode)
+            Task {
+                let onlineMode = sut.isInOfflineMode
+                XCTAssertFalse(onlineMode)
+            }
         }
     }
 }
@@ -259,22 +300,34 @@ import XCTest
 import Connectable
 
 class YourTests: XCTestCase {
-    func testNetworkBehavior() {
+    func testNetworkBehavior() async {
         // Create a mock connection
         let mockConnection = MockConnection(isConnected: false)
         
         // Use mock in your code
         let sut = YourService(connection: mockConnection)
         
-        // Test offline behavior
-        XCTAssertTrue(sut.isInOfflineMode)
+        // Test offline behavior in Task - no await needed
+        Task {
+            let isOffline = sut.isInOfflineMode
+            XCTAssertTrue(isOffline)
+        }
         
         // Simulate connection established
         mockConnection.simulateConnection(true)
         mockConnection.simulateInterface(.cellular)
         
-        // Test online behavior
-        XCTAssertFalse(sut.isInOfflineMode)
+        // Test online behavior in Task - no await needed
+        Task {
+            let isOnline = sut.isInOfflineMode
+            XCTAssertFalse(isOnline)
+        }
+        
+        // In detached tasks, await is required
+        Task.detached {
+            let isOnline = await sut.isInOfflineMode
+            XCTAssertFalse(isOnline)
+        }
     }
 }
 ```
@@ -302,6 +355,3 @@ struct SecureConnectionMemory: ConnectionMemory {
 // Use custom memory
 let connection = Connection(memory: SecureConnectionMemory())
 ```
-
-## License
-

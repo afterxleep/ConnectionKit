@@ -2,6 +2,13 @@
 
 This guide helps developers migrate from the legacy Reachability implementation to the new Connectable package.
 
+> **Important Note about Async Usage**: 
+> When accessing `isConnected` or `interfaceType` properties:
+> - In regular `Task` blocks: `await` is NOT required
+> - In `Task.detached` blocks: `await` IS required
+> 
+> This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
+
 ## Overview of Key Differences
 
 | Feature | Reachability | Connectable |
@@ -12,6 +19,7 @@ This guide helps developers migrate from the legacy Reachability implementation 
 | Persistence | Not built-in | Built-in state persistence |
 | Reactive Programming | Not supported | First-class Combine support |
 | Test Support | Limited | Comprehensive mock implementation |
+| Async/Await | Not supported | First-class async/await support |
 
 ## Step-by-Step Migration Guide
 
@@ -70,11 +78,22 @@ if reachability?.connection != .unavailable {
     // Offline
 }
 
-// After:
-if connection.isConnected {
-    // Online
-} else {
-    // Offline
+// After (in regular Task) - no await needed:
+Task {
+    if connection.isConnected {
+        // Online
+    } else {
+        // Offline
+    }
+}
+
+// After (in detached Task) - await required:
+Task.detached {
+    if await connection.isConnected {
+        // Online
+    } else {
+        // Offline
+    }
 }
 ```
 
@@ -91,139 +110,50 @@ default:
     // No connection
 }
 
-// After:
-if let interfaceType = connection.interfaceType {
-    switch interfaceType {
-    case .cellular:
-        // Cellular connection
-    case .wifi:
-        // WiFi connection
-    case .wiredEthernet:
-        // Wired connection (not available in Reachability)
-    default:
-        // Other connection type
-    }
-} else {
-    // No connection
-}
-```
-
-### 6. Observing Connection Changes
-
-#### Using Notifications
-
-```swift
-// Before:
-NotificationCenter.default.addObserver(
-    self,
-    selector: #selector(reachabilityChanged),
-    name: .reachabilityChanged,
-    object: reachability
-)
-
-@objc func reachabilityChanged(notification: Notification) {
-    guard let reachability = notification.object as? Reachability else { return }
-    
-    if reachability.connection != .unavailable {
-        // Online
-    } else {
-        // Offline
-    }
-}
-
-// After:
-NotificationCenter.default.addObserver(
-    self,
-    selector: #selector(connectionStateChanged),
-    name: .connectionStateDidChange,
-    object: nil
-)
-
-@objc func connectionStateChanged(notification: Notification) {
-    guard let userInfo = notification.userInfo,
-          let isConnected = userInfo["isConnected"] as? Bool else { return }
-    
-    if isConnected {
-        // Online
-    } else {
-        // Offline
-    }
-}
-```
-
-#### Using Reactive Approach (New in Connectable)
-
-```swift
-// This approach wasn't available in Reachability
-import Combine
-
-private var cancellables = Set<AnyCancellable>()
-
-func observeNetworkStatus() {
-    connection.statePublisher
-        .receive(on: RunLoop.main)
-        .sink { [weak self] isConnected in
-            if isConnected {
-                // Online
-            } else {
-                // Offline
-            }
+// After (in regular Task) - no await needed:
+Task {
+    let isConnected = connection.isConnected
+    if isConnected, let interfaceType = connection.interfaceType {
+        switch interfaceType {
+        case .cellular:
+            // Cellular connection
+        case .wifi:
+            // WiFi connection
+        case .wiredEthernet:
+            // Wired connection (not available in Reachability)
+        default:
+            // Other connection type
         }
-        .store(in: &cancellables)
-}
-```
-
-### 7. Cleanup
-
-```swift
-// Before:
-deinit {
-    reachability?.stopNotifier()
-    NotificationCenter.default.removeObserver(self, name: .reachabilityChanged, object: nil)
-}
-
-// After:
-deinit {
-    // No need to stop monitoring if it's a global singleton
-    // For component-level monitoring:
-    // connection.stopMonitoring()
-    
-    NotificationCenter.default.removeObserver(self, name: .connectionStateDidChange, object: nil)
-}
-```
-
-### 8. Migrating Code Using Callbacks
-
-```swift
-// Before:
-reachability?.whenReachable = { reachability in
-    // Handle reachable state
-}
-
-reachability?.whenUnreachable = { reachability in
-    // Handle unreachable state
-}
-
-// After:
-// Using Combine:
-connection.statePublisher
-    .receive(on: RunLoop.main)
-    .sink { isConnected in
-        if isConnected {
-            // Handle reachable state
-        } else {
-            // Handle unreachable state
-        }
+    } else {
+        // No connection
     }
-    .store(in: &cancellables)
+}
+
+// After (in detached Task) - await required:
+Task.detached {
+    let isConnected = await connection.isConnected
+    if isConnected, let interfaceType = await connection.interfaceType {
+        switch interfaceType {
+        case .cellular:
+            // Cellular connection
+        case .wifi:
+            // WiFi connection
+        case .wiredEthernet:
+            // Wired connection (not available in Reachability)
+        default:
+            // Other connection type
+        }
+    } else {
+        // No connection
+    }
+}
 ```
 
-## Migration for LiveObjectsStore
+### 6. Updating LiveObjectsStore Example
 
-Here's how to migrate the code in `LiveObjectsStore` from using Reachability to Connectable:
+Before:
 
-```swift
-// Before:
+```
 @Dependency(\.apiClient) var apiClient
 @Dependency(\.modelStore) var modelStore
 // ...other dependencies
@@ -237,7 +167,7 @@ private func isOnline() -> Bool {
     return true
 }
 
-// After:
+// After (for use in regular Task - no await needed):
 @Dependency(\.apiClient) var apiClient
 @Dependency(\.modelStore) var modelStore
 @Dependency(\.connection) var connection
@@ -246,23 +176,13 @@ private func isOnline() -> Bool {
 private func isOnline() -> Bool {
     return connection.isConnected
 }
-```
 
-## Integration with AppDelegate
+// After (for use in detached Task - await required):
+@Dependency(\.apiClient) var apiClient
+@Dependency(\.modelStore) var modelStore
+@Dependency(\.connection) var connection
+// ...other dependencies
 
-```swift
-// In AppDelegate.swift
-import Connectable
-import Dependencies
-
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    @Dependency(\.connection) private var connection
-    
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Start the connection monitor early in the app lifecycle
-        connection.startMonitoring()
-        
-        return true
-    }
-} 
+private func isOnline() async -> Bool {
+    return await connection.isConnected
+}
