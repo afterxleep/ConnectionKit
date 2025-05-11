@@ -61,7 +61,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", from: "1.0.0")
+    .package(url: "https://github.com/afterxleep/Connectable", .latest)
 ]
 ```
 
@@ -173,8 +173,8 @@ To use it in your app:
 ```swift
 // In Package.swift or Xcode project
 dependencies: [
-    .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
-    .package(url: "https://github.com/afterxleep/Connectable", from: "1.0.0"),
+    .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
+    .package(url: "https://github.com/afterxleep/Connectable", .latest),
 ]
 
 // In your SwiftUI views
