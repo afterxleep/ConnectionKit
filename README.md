@@ -153,13 +153,6 @@ Task.detached {
 }
 ```
 
-> **Important Note about Async Usage**: 
-> When accessing `isConnected` or `interfaceType` properties:
-> - In regular `Task` blocks: `await` is NOT required
-> - In `Task.detached` blocks: `await` IS required
-> 
-> This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
-
 #### Setting up Dependencies
 
 Connectable now includes the swift-dependencies package as a dependency, which simplifies integration. Here's how it works:
@@ -366,3 +359,12 @@ struct SecureConnectionMemory: ConnectionMemory {
 // Use custom memory
 let connection = Connection(memory: SecureConnectionMemory())
 ```
+
+## Async usage
+
+When accessing `isConnected` or `interfaceType` properties:
+
+- In regular `Task` blocks: `await` is NOT required
+- In `Task.detached` blocks: `await` IS required
+ 
+ This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
