@@ -162,10 +162,11 @@ Task.detached {
 
 #### Setting up Dependencies
 
-Connectable automatically registers with the Dependencies system when both packages are imported. The setup includes:
+Connectable now includes the swift-dependencies package as a dependency, which simplifies integration. Here's how it works:
 
-1. Live implementation: Uses the actual Connection class
-2. Test implementation: Uses MockConnection for testing
+1. When both Connectable and Dependencies are imported, the connection dependency is automatically registered
+2. Live implementation: Uses the actual Connection class
+3. Test implementation: Uses MockConnection for testing
 
 To use it in your app:
 
@@ -173,7 +174,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
-    .package(url: "path/to/Connectable", from: "1.0.0"),
+    .package(url: "https://github.com/afterxleep/Connectable", from: "1.0.0"),
 ]
 
 // In your SwiftUI views
@@ -239,6 +240,16 @@ class YourFeatureTests: XCTestCase {
     }
 }
 ```
+
+#### Note on Dependencies Integration
+
+While Connectable includes swift-dependencies as a package dependency, the integration is designed to be optional:
+
+- If you use the Dependencies framework, Connectable will automatically register its key
+- If you don't use Dependencies, Connectable will work fine without it
+- The code that registers with Dependencies is conditionally compiled, so it only activates when Dependencies is available
+
+This approach ensures maximum flexibility while providing seamless integration with the Dependencies ecosystem.
 
 ### Reactive Usage with Combine
 

@@ -14,13 +14,19 @@ let package = Package(
             name: "Connectable",
             targets: ["Connectable"]),
     ],
-    dependencies: [
-        // Dependencies declare other packages that this package depends on.
+    dependencies: [       
+        .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.2")
     ],
     targets: [
         .target(
             name: "Connectable",
-            dependencies: []),
+            dependencies: [
+                .product(
+                    name: "Dependencies", 
+                    package: "swift-dependencies", 
+                    condition: .when(platforms: [.iOS, .macOS])
+                )
+            ]),
         .testTarget(
             name: "ConnectableTests",
             dependencies: ["Connectable"]),

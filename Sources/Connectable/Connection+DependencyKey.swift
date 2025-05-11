@@ -18,9 +18,9 @@ public enum ConnectableKey: DependencyKey {
 }
 
 /// Extension adding connection monitor to DependencyValues
-public extension DependencyValues {
+extension DependencyValues {
     /// Access the connection monitor through dependency injection
-    var connection: Connectable {
+    public var connection: Connectable {
         get { self[ConnectableKey.self] }
         set { self[ConnectableKey.self] = newValue }
     }
