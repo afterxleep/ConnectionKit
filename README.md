@@ -3,7 +3,7 @@
 Connectable is available under the MIT license. See the LICENSE file for more info.
 # Connectable
 
-Modern Swift network monitoring. Elegant, reactive and testable.
+Modern Swift network monitoring. Elegant, reactive and async/await first.
 
 ## Features
 
@@ -16,11 +16,11 @@ Modern Swift network monitoring. Elegant, reactive and testable.
 - Comprehensive mocking for tests
 - Auto-starts monitoring by default
 
-## Why Use Connectable?
+## Why Use Connectable over Reachability?
 
-Here's how Connectable compares to alternatives:
+Here's a quick comparison:
 
-| Feature | Classic Reachability | Connectable |
+| Feature | Reachability | Connectable |
 |---------|--------------|-----------|
 | Framework | SystemConfiguration (legacy) | Network (modern) |
 | Reactive Programming | Not built-in | Native Combine support |
@@ -30,6 +30,8 @@ Here's how Connectable compares to alternatives:
 | Testing | Limited | Protocol-based, easily mocked |
 | Notifications | Yes | Yes |
 | Design | Singleton-based | Protocol-based |
+| Actor-based | No | Yes |
+| Async/Await Support | No | First-class support |
 
 The main benefits:
 
@@ -39,12 +41,13 @@ The main benefits:
 - Elegant architecture with dependency injection support
 - Effortless test mocking through protocol design
 - Intelligent state persistence for immediate startup status
+- Actor-based design for safe concurrent access
+- First-class async/await support
 
 ## Requirements
 
 - iOS 15.0+ / macOS 12.0+
 - Swift 5.7+
-- Xcode 14.0+
 
 ## Installation
 
