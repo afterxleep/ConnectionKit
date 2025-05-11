@@ -373,7 +373,7 @@ This is due to how actor isolation works differently in detached tasks. Use the 
 
 The `Connection` class in Connectable is implemented as an actor, which provides thread-safe access to its mutable state by ensuring only one execution context can access it at a time.
 
-#### Task vs Task.detached
+### Task vs Task.detached
 
 **Regular Tasks:**
 - Inherit the actor isolation context from where they're created
