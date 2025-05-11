@@ -367,4 +367,40 @@ When accessing `isConnected` or `interfaceType` properties:
 - In regular `Task` blocks: `await` is NOT required
 - In `Task.detached` blocks: `await` IS required
  
- This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
+This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
+
+### Why?
+
+The `Connection` class in Connectable is implemented as an actor, which provides thread-safe access to its mutable state by ensuring only one execution context can access it at a time.
+
+#### Task vs Task.detached
+
+**Regular Tasks:**
+- Inherit the actor isolation context from where they're created
+- Maintain the synchronization context of their parent
+- Allow direct access to actor properties without explicit `await`
+- The Swift compiler handles synchronization implicitly
+
+```swift
+// Regular Task example - no await needed
+Task {
+    if connection.isConnected {
+        print("Connected via \(connection.interfaceType ?? .unknown)")
+    }
+}
+```
+
+**Detached Tasks:**
+- Run completely independently from their parent context
+- Don't inherit any actor isolation from where they're created
+- Must explicitly await when accessing actor properties
+- Require manual synchronization through `await`
+
+```swift
+// Detached Task example - await IS required
+Task.detached {
+    if await connection.isConnected {
+        print("Connected via \(await connection.interfaceType ?? .unknown)")
+    }
+}
+```
