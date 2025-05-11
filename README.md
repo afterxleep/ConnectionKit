@@ -61,7 +61,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .latest)
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.3"))
 ]
 ```
 
@@ -174,7 +174,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .latest),
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.3"))
 ]
 
 // In your SwiftUI views
