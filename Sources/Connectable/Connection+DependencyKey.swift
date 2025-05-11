@@ -7,12 +7,12 @@ import Network
 import Dependencies
 
 /// Create a wrapper to act as the DependencyKey
-enum ConnectableKey: DependencyKey {
-    static var liveValue: Connectable {
+public enum ConnectableKey: DependencyKey {
+    public static var liveValue: Connectable {
         Connection()
     }
     
-    static var testValue: Connectable {
+    public static var testValue: Connectable {
         MockConnection()
     }
 }
@@ -25,4 +25,4 @@ public extension DependencyValues {
         set { self[ConnectableKey.self] = newValue }
     }
 }
-#endif 
+#endif
