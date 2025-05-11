@@ -5,13 +5,6 @@ Connectable is available under the MIT license. See the LICENSE file for more in
 
 Modern Swift network monitoring. Elegant, reactive and testable.
 
-> **Important Note about Async Usage**: 
-> When accessing `isConnected` or `interfaceType` properties:
-> - In regular `Task` blocks: `await` is NOT required
-> - In `Task.detached` blocks: `await` IS required
-> 
-> This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
-
 ## Features
 
 - Elegant network connectivity monitoring
@@ -159,6 +152,13 @@ Task.detached {
     }
 }
 ```
+
+> **Important Note about Async Usage**: 
+> When accessing `isConnected` or `interfaceType` properties:
+> - In regular `Task` blocks: `await` is NOT required
+> - In `Task.detached` blocks: `await` IS required
+> 
+> This is due to how actor isolation works differently in detached tasks. Use the appropriate pattern based on your context.
 
 #### Setting up Dependencies
 
