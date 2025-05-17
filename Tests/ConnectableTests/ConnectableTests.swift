@@ -121,6 +121,34 @@ final class ConnectableTests: XCTestCase {
         let updatedRemembered = await connection.rememberedConnectionState()
         XCTAssertFalse(updatedRemembered)
     }
+    
+    func testConnectionStateMatchesPropertyImmediately() async {
+        // Given
+        let connection = MockConnection(isConnected: false)
+        let expectation = self.expectation(description: "Network status changed")
+        var propertyValueInClosure: Bool?
+        
+        // When
+        connection.statePublisher
+            .dropFirst() // Skip initial value
+            .sink { isConnected in
+                // Capture the isConnected property inside the closure
+                // This simulates what's happening in the user's code
+                propertyValueInClosure = connection.isConnected
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+        
+        // Simulate connectivity change
+        connection.simulateConnection(true)
+        
+        // Then
+        await fulfillment(of: [expectation], timeout: 1)
+        
+        // The isConnected property should match what was emitted by the publisher
+        XCTAssertEqual(propertyValueInClosure, true)
+        XCTAssertTrue(propertyValueInClosure!)
+    }
 }
 
 // MARK: - Test Helper

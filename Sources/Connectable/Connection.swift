@@ -75,18 +75,18 @@ public final class Connection: Connectable {
     /// In-memory current path for immediate access and detailed info
     private var currentPath: NWPath?
     
+    /// Current connection state, stored separately to ensure consistency with the subject
+    private var currentConnectionState: Bool = false
+    
     /// Whether the device is currently connected
     public var isConnected: Bool {
-        guard let path = currentPath else {
-            // Default to true if we don't have a path yet
-            return true
-        }
-        return path.status == .satisfied
+        // Use the stored state which is always synchronized with the publisher
+        return currentConnectionState
     }
     
     /// The current connection interface type
     public var interfaceType: NWInterface.InterfaceType? {
-        guard let path = currentPath, path.status == .satisfied else { return nil }
+        guard let path = currentPath, currentConnectionState else { return nil }
         if path.usesInterfaceType(.wifi) { return .wifi }
         if path.usesInterfaceType(.cellular) { return .cellular }
         if path.usesInterfaceType(.wiredEthernet) { return .wiredEthernet }
@@ -122,7 +122,8 @@ public final class Connection: Connectable {
         // Update the memory with current state
         memory.saveConnectionState(currentlyConnected)
         
-        // Initialize with current network state
+        // Initialize both the subject and our tracked state
+        self.currentConnectionState = currentlyConnected
         stateSubject.send(currentlyConnected)
         
         Logger.connectableLogger.info("Connection monitor initialized with current state: \(currentlyConnected)")
@@ -141,7 +142,8 @@ public final class Connection: Connectable {
             
             let currentIsConnected = path.status == .satisfied
             
-            // Update connection subject
+            // Update both the subject and our tracked state
+            self.currentConnectionState = currentIsConnected
             self.stateSubject.send(currentIsConnected)
             
             // Remember the connection state

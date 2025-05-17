@@ -5,13 +5,6 @@ Connectable is available under the MIT license. See the LICENSE file for more in
 
 Modern Swift network monitoring. Elegant, reactive and async/await first.
 
-## Changelog
-
-### v1.0.5 (Latest)
-- Fixed initial connection state detection to use actual network status instead of remembered state
-- Improved reliability of connectivity detection at app startup
-- Better handling of network transitions
-
 ## Features
 
 - Elegant network connectivity monitoring
@@ -64,7 +57,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.5"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.6"))
 ]
 ```
 
@@ -177,7 +170,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.5"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.6"))
 ]
 
 // In your SwiftUI views
@@ -414,3 +407,15 @@ Task.detached {
     }
 }
 ```
+
+## Changelog
+
+### v1.0.6 (Latest)
+- Fixed synchronization between statePublisher and isConnected property
+- Ensures consistent connection state when accessing property inside publisher callbacks
+- Fixed racing condition where property might return different value than publisher
+
+### v1.0.5
+- Fixed initial connection state detection to use actual network status instead of remembered state
+- Improved reliability of connectivity detection at app startup
+- Better handling of network transitions
