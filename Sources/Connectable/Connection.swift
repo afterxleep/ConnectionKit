@@ -78,7 +78,8 @@ public final class Connection: Connectable {
     /// Whether the device is currently connected
     public var isConnected: Bool {
         guard let path = currentPath else {
-            return rememberedConnectionState()
+            // Default to true if we don't have a path yet
+            return true
         }
         return path.status == .satisfied
     }
@@ -111,11 +112,20 @@ public final class Connection: Connectable {
         
         setupMonitor()
         
-        // Initialize with value from memory
-        let initiallyConnected = rememberedConnectionState()
-        stateSubject.send(initiallyConnected)
+        // Get current network path immediately
+        let initialPath = monitor.currentPath
+        self.currentPath = initialPath
         
-        Logger.connectableLogger.info("Connection monitor initialized with remembered state: \(initiallyConnected)")
+        // Check if currently connected based on actual network state
+        let currentlyConnected = initialPath.status == .satisfied
+        
+        // Update the memory with current state
+        memory.saveConnectionState(currentlyConnected)
+        
+        // Initialize with current network state
+        stateSubject.send(currentlyConnected)
+        
+        Logger.connectableLogger.info("Connection monitor initialized with current state: \(currentlyConnected)")
         
         if autoStart {
             startMonitoring()
