@@ -64,29 +64,62 @@ public final class Connection: Connectable {
     private let monitorQueue: DispatchQueue
     private let memory: ConnectionMemory
     
+    /// State management
+    private let lock = NSLock() // Thread safety mechanism
+    private var _currentConnectionState: Bool = true // Default to true for better UX
+    private var _currentPath: NWPath?
+    
     /// Subject for Combine integration
-    private let stateSubject = CurrentValueSubject<Bool, Never>(false)
+    private let stateSubject: CurrentValueSubject<Bool, Never>
     
     /// Publisher for connection state changes
     public var statePublisher: AnyPublisher<Bool, Never> {
         stateSubject.eraseToAnyPublisher()
     }
     
-    /// In-memory current path for immediate access and detailed info
-    private var currentPath: NWPath?
-    
-    /// Current connection state, stored separately to ensure consistency with the subject
-    private var currentConnectionState: Bool = false
-    
-    /// Whether the device is currently connected
+    /// Thread-safe access to connection state
     public var isConnected: Bool {
-        // Use the stored state which is always synchronized with the publisher
-        return currentConnectionState
+        lock.lock()
+        defer { lock.unlock() }
+        Logger.connectableLogger.debug("Reading isConnected property: \(self._currentConnectionState)")
+        return _currentConnectionState
+    }
+    
+    /// Thread-safe access to current path
+    private var currentPath: NWPath? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _currentPath
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _currentPath = newValue
+        }
+    }
+    
+    /// Thread-safe setter for connection state that ensures publisher and property stay in sync
+    private func setConnectionState(_ newState: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        // Only update if state changes
+        if self._currentConnectionState != newState {
+            Logger.connectableLogger.info("Connection state changing: \(self._currentConnectionState) -> \(newState)")
+            _currentConnectionState = newState
+        }
+        
+        // Always send to subject to ensure all subscribers get notified
+        stateSubject.send(newState)
+        
+        // Save to memory
+        memory.saveConnectionState(newState)
     }
     
     /// The current connection interface type
     public var interfaceType: NWInterface.InterfaceType? {
-        guard let path = currentPath, currentConnectionState else { return nil }
+        guard let path = currentPath, isConnected else { return nil }
         if path.usesInterfaceType(.wifi) { return .wifi }
         if path.usesInterfaceType(.cellular) { return .cellular }
         if path.usesInterfaceType(.wiredEthernet) { return .wiredEthernet }
@@ -110,23 +143,25 @@ public final class Connection: Connectable {
         self.monitorQueue = DispatchQueue(label: queueLabel, qos: qos)
         self.memory = memory
         
+        // Initialize with explicit true state - start optimistic
+        self._currentConnectionState = true
+        self.stateSubject = CurrentValueSubject<Bool, Never>(true)
+        
+        Logger.connectableLogger.info("Connection monitor initializing with optimistic state: true")
+        
         setupMonitor()
         
-        // Get current network path immediately
+        // Get current network path immediately if possible
         let initialPath = monitor.currentPath
         self.currentPath = initialPath
         
         // Check if currently connected based on actual network state
         let currentlyConnected = initialPath.status == .satisfied
         
-        // Update the memory with current state
-        memory.saveConnectionState(currentlyConnected)
+        // Update state with actual status, triggering any subscribers
+        setConnectionState(currentlyConnected)
         
-        // Initialize both the subject and our tracked state
-        self.currentConnectionState = currentlyConnected
-        stateSubject.send(currentlyConnected)
-        
-        Logger.connectableLogger.info("Connection monitor initialized with current state: \(currentlyConnected)")
+        Logger.connectableLogger.info("Connection monitor initialized with actual state: \(currentlyConnected)")
         
         if autoStart {
             startMonitoring()
@@ -137,21 +172,28 @@ public final class Connection: Connectable {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
             
-            let previousStatus = self.currentPath?.status
+            // Get previous state for comparison
+            let previousConnected = self.isConnected
+            let previousPath = self.currentPath
+            
+            // Update internal path
             self.currentPath = path
             
+            // Get new connection state from path
             let currentIsConnected = path.status == .satisfied
             
-            // Update both the subject and our tracked state
-            self.currentConnectionState = currentIsConnected
-            self.stateSubject.send(currentIsConnected)
+            // Update connection state
+            self.setConnectionState(currentIsConnected)
             
-            // Remember the connection state
-            self.memory.saveConnectionState(currentIsConnected)
-            
-            // Debugging output
-            if previousStatus != path.status {
-                Logger.connectableLogger.info("Connection status changed to: \(path.status == .satisfied ? "connected" : "disconnected")")
+            // Debugging output if state changed
+            if previousConnected != currentIsConnected {
+                Logger.connectableLogger.info("Connection status changed: \(previousConnected) -> \(currentIsConnected)")
+                
+                if let prevPath = previousPath {
+                    Logger.connectableLogger.debug("Previous path: \(String(describing: prevPath))")
+                }
+                Logger.connectableLogger.debug("Current path: \(String(describing: path))")
+                
                 if currentIsConnected {
                     if path.usesInterfaceType(.wifi) {
                         Logger.connectableLogger.info("Connection type: WiFi")
@@ -161,15 +203,15 @@ public final class Connection: Connectable {
                         Logger.connectableLogger.info("Connection type: Ethernet")
                     }
                 }
-            }
-            
-            // Post a notification on the main thread
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: .connectionStateDidChange,
-                    object: self,
-                    userInfo: ["isConnected": currentIsConnected]
-                )
+                
+                // Post a notification on the main thread for UI updates
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .connectionStateDidChange,
+                        object: self,
+                        userInfo: ["isConnected": currentIsConnected]
+                    )
+                }
             }
         }
     }
