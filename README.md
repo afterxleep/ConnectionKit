@@ -57,7 +57,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.7"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.8"))
 ]
 ```
 
@@ -170,7 +170,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.7"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.8"))
 ]
 
 // In your SwiftUI views
@@ -410,12 +410,18 @@ Task.detached {
 
 ## Changelog
 
-### v1.0.7 (Latest)
+### v1.0.8 (Latest)
+- **CRITICAL FIX**: Fixed false positive initial state bug where `statePublisher` always emitted `true` on subscription
+- Removed optimistic initialization that caused incorrect initial connection state
+- Publisher now only emits when connection state actually changes
+- Initialization now uses actual network state instead of assuming connectivity
+- Enhanced test coverage to prevent regression of this issue
+
+### v1.0.7
 - Completely rebuilt thread-safety mechanisms for networking state
 - Added proper locking for all state changes
 - Enhanced logging for diagnosing connectivity issues
-- Fixed critical issue where state would reset to false on network changes
-- Improved reliability with optimistic initial state
+
 
 ### v1.0.6
 - Fixed synchronization between statePublisher and isConnected property

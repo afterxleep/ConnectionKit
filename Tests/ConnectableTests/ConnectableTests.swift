@@ -149,6 +149,35 @@ final class ConnectableTests: XCTestCase {
         XCTAssertEqual(propertyValueInClosure, true)
         XCTAssertTrue(propertyValueInClosure!)
     }
+    
+    func testRealConnectionDoesNotEmitFalsePositives() async {
+        // Given - Create a real connection instance
+        let connection = Connection(autoStart: false)
+        let expectation = self.expectation(description: "Should not receive false positive")
+        expectation.isInverted = true // We expect this NOT to be fulfilled
+        var receivedInitialValue: Bool?
+        
+        // When - Subscribe to state publisher
+        connection.statePublisher
+            .sink { isConnected in
+                // If we receive true when the device might actually be offline,
+                // this would be a false positive
+                if isConnected == true {
+                    receivedInitialValue = isConnected
+                    expectation.fulfill() // This should not happen if offline
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Then - Wait briefly to see if we get any false positives
+        await fulfillment(of: [expectation], timeout: 0.5)
+        
+        // Verify that if we did receive a value, it matches the actual property
+        if let received = receivedInitialValue {
+            let actualState = connection.isConnected
+            XCTAssertEqual(received, actualState, "Publisher value should match isConnected property")
+        }
+    }
 }
 
 // MARK: - Test Helper

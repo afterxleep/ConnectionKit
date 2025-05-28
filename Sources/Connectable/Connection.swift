@@ -66,7 +66,7 @@ public final class Connection: Connectable {
     
     /// State management
     private let lock = NSLock() // Thread safety mechanism
-    private var _currentConnectionState: Bool = true // Default to true for better UX
+    private var _currentConnectionState: Bool = false // Will be set to actual state during init
     private var _currentPath: NWPath?
     
     /// Subject for Combine integration
@@ -108,13 +108,13 @@ public final class Connection: Connectable {
         if self._currentConnectionState != newState {
             Logger.connectableLogger.info("Connection state changing: \(self._currentConnectionState) -> \(newState)")
             _currentConnectionState = newState
+            
+            // Only send to subject when state actually changes
+            stateSubject.send(newState)
+            
+            // Save to memory
+            memory.saveConnectionState(newState)
         }
-        
-        // Always send to subject to ensure all subscribers get notified
-        stateSubject.send(newState)
-        
-        // Save to memory
-        memory.saveConnectionState(newState)
     }
     
     /// The current connection interface type
@@ -143,25 +143,22 @@ public final class Connection: Connectable {
         self.monitorQueue = DispatchQueue(label: queueLabel, qos: qos)
         self.memory = memory
         
-        // Initialize with explicit true state - start optimistic
-        self._currentConnectionState = true
-        self.stateSubject = CurrentValueSubject<Bool, Never>(true)
+        // Get current network path immediately to determine actual state
+        let initialPath = monitor.currentPath
+        let currentlyConnected = initialPath.status == .satisfied
         
-        Logger.connectableLogger.info("Connection monitor initializing with optimistic state: true")
+        // Initialize with actual network state instead of optimistic true
+        self._currentConnectionState = currentlyConnected
+        self.stateSubject = CurrentValueSubject<Bool, Never>(currentlyConnected)
+        
+        Logger.connectableLogger.info("Connection monitor initializing with actual state: \(currentlyConnected)")
         
         setupMonitor()
         
-        // Get current network path immediately if possible
-        let initialPath = monitor.currentPath
+        // Set the current path
         self.currentPath = initialPath
         
-        // Check if currently connected based on actual network state
-        let currentlyConnected = initialPath.status == .satisfied
-        
-        // Update state with actual status, triggering any subscribers
-        setConnectionState(currentlyConnected)
-        
-        Logger.connectableLogger.info("Connection monitor initialized with actual state: \(currentlyConnected)")
+        Logger.connectableLogger.info("Connection monitor initialized with state: \(currentlyConnected)")
         
         if autoStart {
             startMonitoring()
