@@ -76,4 +76,4 @@ public final class MockConnection: Connectable {
         _interfaceType = type
         lock.unlock()
     }
-} 
+}

@@ -3,7 +3,6 @@
 import Network
 import Foundation
 import Combine
-import OSLog
 
 /// Notification sent when connection state changes
 public extension Notification.Name {
@@ -35,11 +34,6 @@ public struct DefaultConnectionMemory: ConnectionMemory {
     }
 }
 
-/// Logger for connection monitoring
-private extension Logger {
-    static let connectableLogger = Logger(subsystem: "com.connectable", category: "Connection")
-}
-
 /// Protocol defining the core functionality of connection monitoring
 public protocol Connectable {
     /// Whether the device currently has connectivity
@@ -65,23 +59,68 @@ public final class Connection: Connectable {
     private let memory: ConnectionMemory
     
     /// State management
-    private let lock = NSLock() // Thread safety mechanism
-    private var _currentConnectionState: Bool = false // Will be set to actual state during init
+    private let lock = NSLock()
+    private var _currentConnectionState: Bool = false
     private var _currentPath: NWPath?
+    private var _hasEmittedInitialState = false
     
-    /// Subject for Combine integration
-    private let stateSubject: CurrentValueSubject<Bool, Never>
+    /// Subject for Combine integration - will be initialized with correct initial state
+    private var stateSubject: CurrentValueSubject<Bool, Never>?
     
     /// Publisher for connection state changes
     public var statePublisher: AnyPublisher<Bool, Never> {
-        stateSubject.eraseToAnyPublisher()
+        // Thread-safe access to subject
+        lock.lock()
+        let subject = stateSubject
+        lock.unlock()
+        
+        if let subject = subject {
+            // Subject is ready with correct initial state
+            return subject.eraseToAnyPublisher()
+        } else {
+            // Subject not ready yet, return a deferred publisher that waits
+            return Deferred {
+                Future<Bool, Never> { [weak self] promise in
+                    func checkForSubject() {
+                        guard let self = self else { return }
+                        
+                        self.lock.lock()
+                        let currentSubject = self.stateSubject
+                        self.lock.unlock()
+                        
+                        if let subject = currentSubject {
+                            // Subject is ready, fulfill with current value and switch to subject
+                            promise(.success(subject.value))
+                        } else {
+                            // Still waiting, check again soon
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                                checkForSubject()
+                            }
+                        }
+                    }
+                    checkForSubject()
+                }
+                .flatMap { [weak self] initialValue in
+                    // After getting initial value, switch to the actual subject
+                    guard let self = self else {
+                        return Empty<Bool, Never>().eraseToAnyPublisher()
+                    }
+                    
+                    self.lock.lock()
+                    let subject = self.stateSubject
+                    self.lock.unlock()
+                    
+                    return subject?.eraseToAnyPublisher() ?? Empty<Bool, Never>().eraseToAnyPublisher()
+                }
+            }
+            .eraseToAnyPublisher()
+        }
     }
     
     /// Thread-safe access to connection state
     public var isConnected: Bool {
         lock.lock()
         defer { lock.unlock() }
-        Logger.connectableLogger.debug("Reading isConnected property: \(self._currentConnectionState)")
         return _currentConnectionState
     }
     
@@ -96,24 +135,6 @@ public final class Connection: Connectable {
             lock.lock()
             defer { lock.unlock() }
             _currentPath = newValue
-        }
-    }
-    
-    /// Thread-safe setter for connection state that ensures publisher and property stay in sync
-    private func setConnectionState(_ newState: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
-        
-        // Only update if state changes
-        if self._currentConnectionState != newState {
-            Logger.connectableLogger.info("Connection state changing: \(self._currentConnectionState) -> \(newState)")
-            _currentConnectionState = newState
-            
-            // Only send to subject when state actually changes
-            stateSubject.send(newState)
-            
-            // Save to memory
-            memory.saveConnectionState(newState)
         }
     }
     
@@ -143,22 +164,11 @@ public final class Connection: Connectable {
         self.monitorQueue = DispatchQueue(label: queueLabel, qos: qos)
         self.memory = memory
         
-        // Get current network path immediately to determine actual state
-        let initialPath = monitor.currentPath
-        let currentlyConnected = initialPath.status == .satisfied
-        
-        // Initialize with actual network state instead of optimistic true
-        self._currentConnectionState = currentlyConnected
-        self.stateSubject = CurrentValueSubject<Bool, Never>(currentlyConnected)
-        
-        Logger.connectableLogger.info("Connection monitor initializing with actual state: \(currentlyConnected)")
+        // Don't create the subject yet - wait for real initial state from monitor
+        // This prevents the false initial state emission that causes inversion issues
+        self._currentConnectionState = false  // Temporary placeholder
         
         setupMonitor()
-        
-        // Set the current path
-        self.currentPath = initialPath
-        
-        Logger.connectableLogger.info("Connection monitor initialized with state: \(currentlyConnected)")
         
         if autoStart {
             startMonitoring()
@@ -169,45 +179,51 @@ public final class Connection: Connectable {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
             
-            // Get previous state for comparison
-            let previousConnected = self.isConnected
-            let previousPath = self.currentPath
+            let newIsConnected = path.status == .satisfied
             
-            // Update internal path
-            self.currentPath = path
+            // Update state atomically and check if this is initial state or a real change
+            self.lock.lock()
+            let previousConnected = self._currentConnectionState
+            let hasEmittedInitial = self._hasEmittedInitialState
+            self._currentConnectionState = newIsConnected
+            self._currentPath = path
             
-            // Get new connection state from path
-            let currentIsConnected = path.status == .satisfied
-            
-            // Update connection state
-            self.setConnectionState(currentIsConnected)
-            
-            // Debugging output if state changed
-            if previousConnected != currentIsConnected {
-                Logger.connectableLogger.info("Connection status changed: \(previousConnected) -> \(currentIsConnected)")
+            if !hasEmittedInitial {
+                // This is the REAL initial state detection - could be online OR offline
+                self._hasEmittedInitialState = true
                 
-                if let prevPath = previousPath {
-                    Logger.connectableLogger.debug("Previous path: \(String(describing: prevPath))")
-                }
-                Logger.connectableLogger.debug("Current path: \(String(describing: path))")
+                // Create subject with the actual initial state (not false assumption)
+                self.stateSubject = CurrentValueSubject<Bool, Never>(newIsConnected)
+                self.lock.unlock()
                 
-                if currentIsConnected {
-                    if path.usesInterfaceType(.wifi) {
-                        Logger.connectableLogger.info("Connection type: WiFi")
-                    } else if path.usesInterfaceType(.cellular) {
-                        Logger.connectableLogger.info("Connection type: Cellular, Expensive: \(path.isExpensive)")
-                    } else if path.usesInterfaceType(.wiredEthernet) {
-                        Logger.connectableLogger.info("Connection type: Ethernet")
+                
+                // Save to memory but don't post notification - this is initial detection, not a change
+                self.memory.saveConnectionState(newIsConnected)
+                
+            } else {
+                // This is a real state change after initial state was established
+                let stateChanged = previousConnected != newIsConnected
+                self.lock.unlock()
+                
+                
+                // Only emit and notify if state actually changed
+                if stateChanged {
+                    // Thread-safe subject update
+                    self.lock.lock()
+                    let subject = self.stateSubject
+                    self.lock.unlock()
+                    
+                    subject?.send(newIsConnected)
+                    self.memory.saveConnectionState(newIsConnected)
+                    
+                    // Post notification for real state changes only
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(
+                            name: .connectionStateDidChange,
+                            object: self,
+                            userInfo: ["isConnected": newIsConnected]
+                        )
                     }
-                }
-                
-                // Post a notification on the main thread for UI updates
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .connectionStateDidChange,
-                        object: self,
-                        userInfo: ["isConnected": currentIsConnected]
-                    )
                 }
             }
         }
@@ -215,13 +231,11 @@ public final class Connection: Connectable {
     
     /// Start monitoring connectivity (automatically called during initialization unless autoStart is false)
     private func startMonitoring() {
-        Logger.connectableLogger.info("Starting connection monitoring")
         monitor.start(queue: monitorQueue)
     }
     
     /// Stop monitoring connectivity
     public func stopMonitoring() {
-        Logger.connectableLogger.info("Stopping connection monitoring")
         monitor.cancel()
     }
     
@@ -233,4 +247,4 @@ public final class Connection: Connectable {
     deinit {
         stopMonitoring()
     }
-} 
+}
