@@ -259,10 +259,9 @@ Connectable automatically detects when running on iOS Simulator and activates a 
 
 ### Testing on Simulator
 To test network changes on iOS Simulator:
-1. Use **Device > Network Link Conditioner** in Simulator menu
-2. Toggle between different network profiles
-3. Connectable will detect changes within 2 seconds on simulator
-4. Real devices detect changes immediately via `NWPathMonitor`
+1. Toggle your Mac's network connection (WiFi/Ethernet) since simulator uses host network
+2. Connectable will detect changes within 2 seconds on simulator
+3. Real devices detect changes immediately via `NWPathMonitor`
 
 ### Reactive Usage with Combine
 
