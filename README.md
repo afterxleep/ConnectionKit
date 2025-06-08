@@ -57,7 +57,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.9"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.10"))
 ]
 ```
 
@@ -170,7 +170,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.9"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.10"))
 ]
 
 // In your SwiftUI views
@@ -246,6 +246,23 @@ While Connectable includes swift-dependencies as a package dependency, the integ
 - The code that registers with Dependencies is conditionally compiled, so it only activates when Dependencies is available
 
 This approach ensures maximum flexibility while providing seamless integration with the Dependencies ecosystem.
+
+## iOS Simulator Support
+
+Connectable automatically detects when running on iOS Simulator and activates a fallback monitoring system. This is necessary because iOS Simulator doesn't always trigger `NWPathMonitor` updates properly when network conditions change.
+
+### Automatic Fallback
+- **Device**: Uses standard `NWPathMonitor` for optimal performance
+- **Simulator**: Adds timer-based network checking every 2 seconds
+- **Zero Configuration**: Fallback activates automatically, no setup required
+- **No Performance Impact**: Fallback only runs on simulator environment
+
+### Testing on Simulator
+To test network changes on iOS Simulator:
+1. Use **Device > Network Link Conditioner** in Simulator menu
+2. Toggle between different network profiles
+3. Connectable will detect changes within 2 seconds on simulator
+4. Real devices detect changes immediately via `NWPathMonitor`
 
 ### Reactive Usage with Combine
 
@@ -410,7 +427,16 @@ Task.detached {
 
 ## Changelog
 
-### v1.0.9 (Latest)
+### v1.0.10 (Latest)
+- **NEW FEATURE**: Added iOS Simulator support with automatic fallback monitoring
+- Resolved iOS Simulator network detection issues where NWPathMonitor doesn't trigger updates properly
+- Automatic timer-based fallback monitoring (2-second intervals) activates only on simulator
+- No performance impact on real devices - fallback only runs on simulator environment
+- Added 2 new tests specifically for simulator support with extended timeouts
+- Enhanced lifecycle management with proper timer cleanup on stopMonitoring()
+- All 26 tests now pass reliably on both real devices and iOS Simulator
+
+### v1.0.9
 - **CRITICAL FIX**: Fixed state inversion bug where WiFi toggle events emitted wrong states
 - Resolved issue where WiFi OFF triggered ONLINE events and WiFi ON triggered OFFLINE events
 - Fixed double emission of states during initialization that caused apparent inversion
