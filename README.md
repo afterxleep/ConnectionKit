@@ -57,7 +57,7 @@ Add Connectable to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.8"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.9"))
 ]
 ```
 
@@ -170,7 +170,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.8"))
+    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.0.9"))
 ]
 
 // In your SwiftUI views
@@ -410,7 +410,16 @@ Task.detached {
 
 ## Changelog
 
-### v1.0.8 (Latest)
+### v1.0.9 (Latest)
+- **CRITICAL FIX**: Fixed state inversion bug where WiFi toggle events emitted wrong states
+- Resolved issue where WiFi OFF triggered ONLINE events and WiFi ON triggered OFFLINE events
+- Fixed double emission of states during initialization that caused apparent inversion
+- Publisher now correctly detects and emits actual network state (online OR offline) without false initial states
+- Enhanced thread-safe subject initialization to prevent race conditions
+- Complete test suite rewrite with 24 comprehensive tests covering all connection scenarios
+- Added tests for rapid state changes, WiFi toggle sequences, and RunLoop.main synchronization
+
+### v1.0.8
 - **CRITICAL FIX**: Fixed false positive initial state bug where `statePublisher` always emitted `true` on subscription
 - Removed optimistic initialization that caused incorrect initial connection state
 - Publisher now only emits when connection state actually changes
