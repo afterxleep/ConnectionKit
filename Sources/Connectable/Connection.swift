@@ -57,6 +57,7 @@ public final class Connection: Connectable {
     private let monitor: NWPathMonitor
     private let monitorQueue: DispatchQueue
     private let memory: ConnectionMemory
+    private var simulatorTimer: Timer?
     
     /// State management
     private let lock = NSLock()
@@ -172,6 +173,11 @@ public final class Connection: Connectable {
         
         if autoStart {
             startMonitoring()
+            
+            // Start simulator fallback if needed
+            if isRunningOnSimulator {
+                startSimulatorFallback()
+            }
         }
     }
     
@@ -229,6 +235,40 @@ public final class Connection: Connectable {
         }
     }
     
+    /// Check if running on iOS Simulator
+    private var isRunningOnSimulator: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
+    
+    /// Start simulator-specific fallback monitoring
+    /// iOS Simulator doesn't always trigger NWPathMonitor updates properly
+    private func startSimulatorFallback() {
+        simulatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.checkSimulatorNetworkState()
+        }
+    }
+    
+    /// Check network state on simulator and force update if needed
+    private func checkSimulatorNetworkState() {
+        let currentPath = monitor.currentPath
+        let actualState = currentPath.status == .satisfied
+        
+        lock.lock()
+        let reportedState = _currentConnectionState
+        let hasEmitted = _hasEmittedInitialState
+        lock.unlock()
+        
+        // If simulator hasn't emitted initial state or states don't match
+        if !hasEmitted || actualState != reportedState {
+            // Force path update handler to run with current path
+            monitor.pathUpdateHandler?(currentPath)
+        }
+    }
+    
     /// Start monitoring connectivity (automatically called during initialization unless autoStart is false)
     private func startMonitoring() {
         monitor.start(queue: monitorQueue)
@@ -237,6 +277,8 @@ public final class Connection: Connectable {
     /// Stop monitoring connectivity
     public func stopMonitoring() {
         monitor.cancel()
+        simulatorTimer?.invalidate()
+        simulatorTimer = nil
     }
     
     /// Get the last remembered connection state

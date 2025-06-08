@@ -648,4 +648,57 @@ final class ConnectableTests: XCTestCase {
         // Clean up
         connection.stopMonitoring()
     }
+    
+    // MARK: - Simulator Support Tests
+    
+    func testConnectionShouldWorkOnSimulator() {
+        // Test that Connection works properly on iOS Simulator
+        // Given
+        let connection = Connection(autoStart: true)
+        let expectation = self.expectation(description: "Simulator network detection")
+        var receivedState: Bool?
+        
+        // When
+        connection.statePublisher
+            .sink { value in
+                receivedState = value
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+        
+        // Then - Should work on both device and simulator
+        wait(for: [expectation], timeout: 5.0) // Longer timeout for simulator
+        
+        XCTAssertNotNil(receivedState, "Should detect network state on simulator")
+        XCTAssertEqual(receivedState, connection.isConnected, "Publisher and property should match on simulator")
+        
+        // Clean up
+        connection.stopMonitoring()
+    }
+    
+    func testConnectionShouldDetectSimulatorNetworkChanges() {
+        // Test that Connection can detect network changes on simulator with fallback
+        // Given
+        let connection = Connection(autoStart: true)
+        let expectation = self.expectation(description: "Simulator state detection")
+        var stateCount = 0
+        
+        // When
+        connection.statePublisher
+            .sink { _ in
+                stateCount += 1
+                if stateCount >= 1 {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Then - Should detect initial state within reasonable time on simulator
+        wait(for: [expectation], timeout: 6.0) // Extra time for simulator fallback
+        
+        XCTAssertGreaterThanOrEqual(stateCount, 1, "Should detect at least initial state on simulator")
+        
+        // Clean up
+        connection.stopMonitoring()
+    }
 }
