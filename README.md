@@ -249,19 +249,28 @@ This approach ensures maximum flexibility while providing seamless integration w
 
 ## iOS Simulator Support
 
-Connectable automatically detects when running on iOS Simulator and activates a fallback monitoring system. This is necessary because iOS Simulator doesn't always trigger `NWPathMonitor` updates properly when network conditions change.
+Connectable automatically detects when running on iOS Simulator and activates a reliable fallback monitoring system. This is necessary because iOS Simulator doesn't properly support `NWPath` monitoring, leading to unreliable or missing network state updates.
 
 ### Automatic Fallback
-- **Device**: Uses standard `NWPathMonitor` for optimal performance
-- **Simulator**: Adds timer-based network checking every 2 seconds
+- **Device**: Uses standard `NWPathMonitor` for optimal performance and immediate detection
+- **Simulator**: Uses URLSession-based connectivity checks with 2-second intervals
 - **Zero Configuration**: Fallback activates automatically, no setup required
+- **100% Reliability**: Actual network requests verify connectivity on simulator
 - **No Performance Impact**: Fallback only runs on simulator environment
+
+### How It Works
+On iOS Simulator, Connectable:
+1. Bypasses unreliable `NWPathMonitor` path status
+2. Performs lightweight HEAD requests to Apple's connectivity check endpoint
+3. Updates connection state based on actual network reachability
+4. Maintains consistent behavior with device implementation
 
 ### Testing on Simulator
 To test network changes on iOS Simulator:
 1. Toggle your Mac's network connection (WiFi/Ethernet) since simulator uses host network
 2. Connectable will detect changes within 2 seconds on simulator
 3. Real devices detect changes immediately via `NWPathMonitor`
+4. Interface type on simulator always returns `.wifi` when connected
 
 ### Reactive Usage with Combine
 

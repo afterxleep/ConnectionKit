@@ -141,6 +141,11 @@ public final class Connection: Connectable {
     
     /// The current connection interface type
     public var interfaceType: NWInterface.InterfaceType? {
+        // On simulator, we'll always return wifi when connected
+        if isRunningOnSimulator {
+            return isConnected ? .wifi : nil
+        }
+        
         guard let path = currentPath, isConnected else { return nil }
         if path.usesInterfaceType(.wifi) { return .wifi }
         if path.usesInterfaceType(.cellular) { return .cellular }
@@ -184,6 +189,13 @@ public final class Connection: Connectable {
     private func setupMonitor() {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
+            
+            // On iOS Simulator, path.status might not be reliable
+            // So we'll validate it with our fallback if needed
+            if self.isRunningOnSimulator {
+                // Don't process path updates on simulator - let the fallback handle it
+                return
+            }
             
             let newIsConnected = path.status == .satisfied
             
@@ -247,25 +259,123 @@ public final class Connection: Connectable {
     /// Start simulator-specific fallback monitoring
     /// iOS Simulator doesn't always trigger NWPathMonitor updates properly
     private func startSimulatorFallback() {
+        // Start with immediate check
+        checkSimulatorNetworkState()
+        
+        // Then check periodically
         simulatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.checkSimulatorNetworkState()
         }
     }
     
-    /// Check network state on simulator and force update if needed
+    /// Check network state on simulator using actual network request
     private func checkSimulatorNetworkState() {
-        let currentPath = monitor.currentPath
-        let actualState = currentPath.status == .satisfied
+        // For simulator, we can't rely on NWPathMonitor's path status
+        // Instead, we'll use a lightweight network request to verify connectivity
         
+        Task { [weak self] in
+            guard let self = self else { return }
+            
+            let isReachable = await self.performSimulatorConnectivityCheck()
+            
+            // Get current state
+            self.lock.lock()
+            let currentState = self._currentConnectionState
+            let hasEmittedInitial = self._hasEmittedInitialState
+            let previousState = currentState
+            self.lock.unlock()
+            
+            // If this is the first check or state has changed
+            if !hasEmittedInitial || currentState != isReachable {
+                // If transitioning from online to offline, double-check
+                // This handles the case where network is briefly unavailable during transition
+                if previousState && !isReachable && hasEmittedInitial {
+                    // Wait a moment and check again
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                    let secondCheck = await self.performSimulatorConnectivityCheck()
+                    
+                    await MainActor.run { [weak self] in
+                        self?.updateSimulatorState(isConnected: secondCheck)
+                    }
+                } else {
+                    // Normal update
+                    await MainActor.run { [weak self] in
+                        self?.updateSimulatorState(isConnected: isReachable)
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Perform actual network connectivity check for simulator
+    private func performSimulatorConnectivityCheck() async -> Bool {
+        // Use a lightweight connectivity check with timeout
+        let url = URL(string: "https://captive.apple.com/hotspot-detect.html")!
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"  // Only get headers, not full content
+        request.timeoutInterval = 3.0  // 3 second timeout
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        
+        // Configure URLSession to handle network transitions better
+        let config = URLSessionConfiguration.ephemeral
+        config.waitsForConnectivity = false  // Don't wait, we want immediate result
+        config.allowsCellularAccess = true
+        config.allowsExpensiveNetworkAccess = true
+        config.allowsConstrainedNetworkAccess = true
+        
+        let session = URLSession(configuration: config)
+        
+        do {
+            let (_, response) = try await session.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                // Apple's captive portal returns 200 when connected
+                return httpResponse.statusCode == 200
+            }
+        } catch let error as NSError {
+            // Log only non-transient errors for debugging
+            if error.code != -1009 && error.code != -1001 {  // -1009: offline, -1001: timeout
+                print("[Connectable] Simulator connectivity check error: \(error.localizedDescription)")
+            }
+            return false
+        }
+        
+        return false
+    }
+    
+    /// Update simulator state manually
+    private func updateSimulatorState(isConnected: Bool) {
         lock.lock()
-        let reportedState = _currentConnectionState
-        let hasEmitted = _hasEmittedInitialState
-        lock.unlock()
+        let previousConnected = _currentConnectionState
+        let hasEmittedInitial = _hasEmittedInitialState
+        _currentConnectionState = isConnected
         
-        // If simulator hasn't emitted initial state or states don't match
-        if !hasEmitted || actualState != reportedState {
-            // Force path update handler to run with current path
-            monitor.pathUpdateHandler?(currentPath)
+        if !hasEmittedInitial {
+            _hasEmittedInitialState = true
+            stateSubject = CurrentValueSubject<Bool, Never>(isConnected)
+            lock.unlock()
+            
+            memory.saveConnectionState(isConnected)
+        } else {
+            let stateChanged = previousConnected != isConnected
+            lock.unlock()
+            
+            if stateChanged {
+                lock.lock()
+                let subject = stateSubject
+                lock.unlock()
+                
+                subject?.send(isConnected)
+                memory.saveConnectionState(isConnected)
+                
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .connectionStateDidChange,
+                        object: self,
+                        userInfo: ["isConnected": isConnected]
+                    )
+                }
+            }
         }
     }
     

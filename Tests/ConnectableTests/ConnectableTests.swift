@@ -701,4 +701,47 @@ final class ConnectableTests: XCTestCase {
         // Clean up
         connection.stopMonitoring()
     }
+    
+    func testSimulatorFallbackShouldProvideReliableConnectivity() {
+        // Test specifically for iOS Simulator fallback mechanism
+        // Given
+        let connection = Connection(autoStart: true)
+        let expectation = self.expectation(description: "Simulator reliable connectivity")
+        var receivedStates: [Bool] = []
+        var timestamps: [Date] = []
+        
+        // When - Monitor for a period to ensure consistency
+        connection.statePublisher
+            .sink { state in
+                receivedStates.append(state)
+                timestamps.append(Date())
+                
+                // After receiving initial state, wait a bit to ensure no false changes
+                if receivedStates.count == 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        expectation.fulfill()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Then
+        wait(for: [expectation], timeout: 5.0)
+        
+        // Should have exactly one state (initial) if network hasn't changed
+        XCTAssertEqual(receivedStates.count, 1, "Should emit exactly one initial state on simulator without false changes")
+        
+        // The state should match the property
+        XCTAssertEqual(receivedStates.first, connection.isConnected, "Publisher and property should be synchronized")
+        
+        // Interface type should be consistent
+        if connection.isConnected {
+            XCTAssertEqual(connection.interfaceType, .wifi, "Simulator should report wifi when connected")
+        } else {
+            XCTAssertNil(connection.interfaceType, "Simulator should report nil interface when disconnected")
+        }
+        
+        // Clean up
+        connection.stopMonitoring()
+    }
 }
