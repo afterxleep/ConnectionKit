@@ -187,15 +187,19 @@ public final class Connection: Connectable {
     }
     
     private func setupMonitor() {
+        // On simulator, we completely ignore NWPathMonitor
+        if isRunningOnSimulator {
+            // Set up initial state
+            lock.lock()
+            _hasEmittedInitialState = false
+            _currentConnectionState = false
+            lock.unlock()
+            return
+        }
+        
+        // Device: Use normal NWPathMonitor
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
-            
-            // On iOS Simulator, path.status might not be reliable
-            // So we'll validate it with our fallback if needed
-            if self.isRunningOnSimulator {
-                // Don't process path updates on simulator - let the fallback handle it
-                return
-            }
             
             let newIsConnected = path.status == .satisfied
             
@@ -262,45 +266,57 @@ public final class Connection: Connectable {
         // Start with immediate check
         checkSimulatorNetworkState()
         
-        // Then check periodically
+        // Then check every 2 seconds
         simulatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.checkSimulatorNetworkState()
         }
     }
     
-    /// Check network state on simulator using actual network request
+    /// Check network state on simulator using URLSession only
     private func checkSimulatorNetworkState() {
-        // For simulator, we can't rely on NWPathMonitor's path status
-        // Instead, we'll use a lightweight network request to verify connectivity
-        
         Task { [weak self] in
             guard let self = self else { return }
             
-            let isReachable = await self.performSimulatorConnectivityCheck()
+            // Perform connectivity check
+            let isConnected = await self.performSimulatorConnectivityCheck()
             
-            // Get current state
-            self.lock.lock()
-            let currentState = self._currentConnectionState
-            let hasEmittedInitial = self._hasEmittedInitialState
-            let previousState = currentState
-            self.lock.unlock()
-            
-            // If this is the first check or state has changed
-            if !hasEmittedInitial || currentState != isReachable {
-                // If transitioning from online to offline, double-check
-                // This handles the case where network is briefly unavailable during transition
-                if previousState && !isReachable && hasEmittedInitial {
-                    // Wait a moment and check again
-                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                    let secondCheck = await self.performSimulatorConnectivityCheck()
+            // Update state
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                
+                self.lock.lock()
+                let previousState = self._currentConnectionState
+                let hasEmittedInitial = self._hasEmittedInitialState
+                self._currentConnectionState = isConnected
+                
+                if !hasEmittedInitial {
+                    // First time - emit initial state
+                    self._hasEmittedInitialState = true
+                    self.stateSubject = CurrentValueSubject<Bool, Never>(isConnected)
+                    self.lock.unlock()
                     
-                    await MainActor.run { [weak self] in
-                        self?.updateSimulatorState(isConnected: secondCheck)
-                    }
+                    // Save to memory
+                    self.memory.saveConnectionState(isConnected)
                 } else {
-                    // Normal update
-                    await MainActor.run { [weak self] in
-                        self?.updateSimulatorState(isConnected: isReachable)
+                    // Check if state changed
+                    let stateChanged = previousState != isConnected
+                    self.lock.unlock()
+                    
+                    if stateChanged {
+                        // State changed - update everything
+                        self.lock.lock()
+                        let subject = self.stateSubject
+                        self.lock.unlock()
+                        
+                        subject?.send(isConnected)
+                        self.memory.saveConnectionState(isConnected)
+                        
+                        // Post notification
+                        NotificationCenter.default.post(
+                            name: .connectionStateDidChange,
+                            object: self,
+                            userInfo: ["isConnected": isConnected]
+                        )
                     }
                 }
             }
@@ -343,45 +359,13 @@ public final class Connection: Connectable {
         return false
     }
     
-    /// Update simulator state manually
-    private func updateSimulatorState(isConnected: Bool) {
-        lock.lock()
-        let previousConnected = _currentConnectionState
-        let hasEmittedInitial = _hasEmittedInitialState
-        _currentConnectionState = isConnected
-        
-        if !hasEmittedInitial {
-            _hasEmittedInitialState = true
-            stateSubject = CurrentValueSubject<Bool, Never>(isConnected)
-            lock.unlock()
-            
-            memory.saveConnectionState(isConnected)
-        } else {
-            let stateChanged = previousConnected != isConnected
-            lock.unlock()
-            
-            if stateChanged {
-                lock.lock()
-                let subject = stateSubject
-                lock.unlock()
-                
-                subject?.send(isConnected)
-                memory.saveConnectionState(isConnected)
-                
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .connectionStateDidChange,
-                        object: self,
-                        userInfo: ["isConnected": isConnected]
-                    )
-                }
-            }
-        }
-    }
     
     /// Start monitoring connectivity (automatically called during initialization unless autoStart is false)
     private func startMonitoring() {
-        monitor.start(queue: monitorQueue)
+        // On simulator, don't start NWPathMonitor at all
+        if !isRunningOnSimulator {
+            monitor.start(queue: monitorQueue)
+        }
     }
     
     /// Stop monitoring connectivity

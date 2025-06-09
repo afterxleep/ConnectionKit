@@ -266,11 +266,16 @@ On iOS Simulator, Connectable:
 4. Maintains consistent behavior with device implementation
 
 ### Testing on Simulator
-To test network changes on iOS Simulator:
-1. Toggle your Mac's network connection (WiFi/Ethernet) since simulator uses host network
-2. Connectable will detect changes within 2 seconds on simulator
-3. Real devices detect changes immediately via `NWPathMonitor`
+⚠️ Switching WiFi off/on on your Mac while running the app in a simulator can cause the app to never detect re-connection.  This is not a Connectable bug, but a Simulator limitation.
+
+To properly test network changes on iOS Simulator:
+
+1. Use Network link conditioner (XCode > Open Developer Tools > More Tools), and get 
+Additional Tools for Xcode
+2. Install Network Link Conditioner and change connectivity to 100% los
+3. Connectable will detect changes within 2 seconds on simulator
 4. Interface type on simulator always returns `.wifi` when connected
+
 
 ### Reactive Usage with Combine
 
