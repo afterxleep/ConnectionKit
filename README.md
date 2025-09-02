@@ -5,7 +5,7 @@ ConnectionKit is available under the MIT license. See the LICENSE file for more 
 
 Modern Swift network monitoring. Elegant, reactive and async/await first.
 
-> **Migration Note**: This package was previously named `Connectable`. If you're upgrading from version 1.x, update your imports from `import Connectable` to `import ConnectionKit`.
+> **⚠️ Migration Note**: This package was previously named `Connectable`. If you're upgrading from version 1.x, update your imports from `import Connectable` to `import ConnectionKit`.
 
 ## Features
 
