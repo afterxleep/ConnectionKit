@@ -4,22 +4,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "Connectable",
+    name: "ConnectionKit",
     platforms: [
         .iOS(.v15),
         .macOS(.v12)
     ],
     products: [
         .library(
-            name: "Connectable",
-            targets: ["Connectable"]),
+            name: "ConnectionKit",
+            targets: ["ConnectionKit"]),
     ],
     dependencies: [       
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.2")
     ],
     targets: [
         .target(
-            name: "Connectable",
+            name: "ConnectionKit",
             dependencies: [
                 .product(
                     name: "Dependencies", 
@@ -28,7 +28,7 @@ let package = Package(
                 )
             ]),
         .testTarget(
-            name: "ConnectableTests",
-            dependencies: ["Connectable"]),
+            name: "ConnectionKitTests",
+            dependencies: ["ConnectionKit"]),
     ]
 ) 

@@ -1,9 +1,11 @@
 ## License
 
-Connectable is available under the MIT license. See the LICENSE file for more info.
-# Connectable
+ConnectionKit is available under the MIT license. See the LICENSE file for more info.
+# ConnectionKit
 
 Modern Swift network monitoring. Elegant, reactive and async/await first.
+
+> **Migration Note**: This package was previously named `Connectable`. If you're upgrading from version 1.x, update your imports from `import Connectable` to `import ConnectionKit`.
 
 ## Features
 
@@ -16,11 +18,11 @@ Modern Swift network monitoring. Elegant, reactive and async/await first.
 - Comprehensive mocking for tests
 - Auto-starts monitoring by default
 
-## Why Use Connectable over Reachability?
+## Why Use ConnectionKit over Reachability?
 
 Here's a quick comparison:
 
-| Feature | Reachability | Connectable |
+| Feature | Reachability | ConnectionKit |
 |---------|--------------|-----------|
 | Framework | SystemConfiguration (legacy) | Network (modern) |
 | Reactive Programming | Not built-in | Native Combine support |
@@ -53,26 +55,26 @@ The main benefits:
 
 ### Swift Package Manager
 
-Add Connectable to your project as a package dependency in Xcode.
+Add ConnectionKit to your project as a package dependency in Xcode.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.1.0"))
+    .package(url: "https://github.com/afterxleep/ConnectionKit", .upToNextMajor(from: "2.0.0"))
 ]
 ```
 
 ## Migration
 
-If you're transitioning from Reachability to Connectable, check out the detailed [Migration Guide](https://github.com/afterxleep/Connectable/blob/main/docs/migrate.from.reachability.md) for step-by-step instructions on updating your codebase.
+If you're transitioning from Reachability to ConnectionKit, check out the detailed [Migration Guide](https://github.com/afterxleep/ConnectionKit/blob/main/docs/migrate.from.reachability.md) for step-by-step instructions on updating your codebase.
 
 ## Usage
 
-Connectable offers multiple ways to integrate with your app.
+ConnectionKit offers multiple ways to integrate with your app.
 
 ### Basic Usage
 
 ```swift
-import Connectable
+import ConnectionKit
 
 // Simple usage - auto-starts monitoring
 let connection = Connection()
@@ -106,7 +108,7 @@ Task.detached {
 ### Disable Auto-start
 
 ```swift
-import Connectable
+import ConnectionKit
 
 // Create connection without auto-start
 let connection = Connection(autoStart: false)
@@ -118,7 +120,7 @@ connection.stopMonitoring()
 ### With Custom Persistence
 
 ```swift
-import Connectable
+import ConnectionKit
 
 // Create custom memory with specific UserDefaults and key
 let memory = DefaultConnectionMemory(
@@ -135,7 +137,7 @@ let connection = Connection(memory: memory)
 If you're using PointFree's [Dependencies](https://github.com/pointfreeco/swift-dependencies) package:
 
 ```swift
-import Connectable
+import ConnectionKit
 import Dependencies
 
 // Access through dependency injection
@@ -158,9 +160,9 @@ Task.detached {
 
 #### Setting up Dependencies
 
-Connectable now includes the swift-dependencies package as a dependency, which simplifies integration. Here's how it works:
+ConnectionKit now includes the swift-dependencies package as a dependency, which simplifies integration. Here's how it works:
 
-1. When both Connectable and Dependencies are imported, the connection dependency is automatically registered
+1. When both ConnectionKit and Dependencies are imported, the connection dependency is automatically registered
 2. Live implementation: Uses the actual Connection class
 3. Test implementation: Uses MockConnection for testing
 
@@ -170,7 +172,7 @@ To use it in your app:
 // In Package.swift or Xcode project
 dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMajor(from: "1.9.2"))
-    .package(url: "https://github.com/afterxleep/Connectable", .upToNextMajor(from: "1.1.0"))
+    .package(url: "https://github.com/afterxleep/ConnectionKit", .upToNextMajor(from: "2.0.0"))
 ]
 
 // In your SwiftUI views
@@ -200,7 +202,7 @@ Override the connection dependency in your tests:
 
 ```swift
 import XCTest
-import Connectable
+import ConnectionKit
 import Dependencies
 
 class YourFeatureTests: XCTestCase {
@@ -239,17 +241,17 @@ class YourFeatureTests: XCTestCase {
 
 #### Note on Dependencies Integration
 
-While Connectable includes swift-dependencies as a package dependency, the integration is designed to be optional:
+While ConnectionKit includes swift-dependencies as a package dependency, the integration is designed to be optional:
 
-- If you use the Dependencies framework, Connectable will automatically register its key
-- If you don't use Dependencies, Connectable will work fine without it
+- If you use the Dependencies framework, ConnectionKit will automatically register its key
+- If you don't use Dependencies, ConnectionKit will work fine without it
 - The code that registers with Dependencies is conditionally compiled, so it only activates when Dependencies is available
 
 This approach ensures maximum flexibility while providing seamless integration with the Dependencies ecosystem.
 
 ## iOS Simulator Support
 
-Connectable automatically detects when running on iOS Simulator and activates a reliable fallback monitoring system. This is necessary because iOS Simulator doesn't properly support `NWPath` monitoring, leading to unreliable or missing network state updates.
+ConnectionKit automatically detects when running on iOS Simulator and activates a reliable fallback monitoring system. This is necessary because iOS Simulator doesn't properly support `NWPath` monitoring, leading to unreliable or missing network state updates.
 
 ### Automatic Fallback
 - **Device**: Uses standard `NWPathMonitor` for optimal performance and immediate detection
@@ -259,28 +261,28 @@ Connectable automatically detects when running on iOS Simulator and activates a 
 - **No Performance Impact**: Fallback only runs on simulator environment
 
 ### How It Works
-On iOS Simulator, Connectable:
+On iOS Simulator, ConnectionKit:
 1. Bypasses unreliable `NWPathMonitor` path status
 2. Performs lightweight HEAD requests to Apple's connectivity check endpoint
 3. Updates connection state based on actual network reachability
 4. Maintains consistent behavior with device implementation
 
 ### Testing on Simulator
-⚠️ Switching WiFi off/on on your Mac while running the app in a simulator can cause the app to never detect re-connection.  This is not a Connectable bug, but a Simulator limitation.
+⚠️ Switching WiFi off/on on your Mac while running the app in a simulator can cause the app to never detect re-connection.  This is not a ConnectionKit bug, but a Simulator limitation.
 
 To properly test network changes on iOS Simulator:
 
 1. Use Network link conditioner (XCode > Open Developer Tools > More Tools), and get 
 Additional Tools for Xcode
 2. Install Network Link Conditioner and change connectivity to 100% los
-3. Connectable will detect changes within 2 seconds on simulator
+3. ConnectionKit will detect changes within 2 seconds on simulator
 4. Interface type on simulator always returns `.wifi` when connected
 
 
 ### Reactive Usage with Combine
 
 ```swift
-import Connectable
+import ConnectionKit
 import Combine
 
 private var cancellables = Set<AnyCancellable>()
@@ -304,7 +306,7 @@ connection.statePublisher
 ### Notification-based Usage
 
 ```swift
-import Connectable
+import ConnectionKit
 
 // Register for notifications
 NotificationCenter.default.addObserver(
@@ -334,7 +336,7 @@ Elegantly mock connections in your tests:
 
 ```swift
 import XCTest
-import Connectable
+import ConnectionKit
 
 class YourTests: XCTestCase {
     func testNetworkBehavior() async {
@@ -374,7 +376,7 @@ class YourTests: XCTestCase {
 Create your own memory mechanism:
 
 ```swift
-import Connectable
+import ConnectionKit
 
 // Create a custom memory implementation
 struct SecureConnectionMemory: ConnectionMemory {
@@ -404,7 +406,7 @@ This is due to how actor isolation works differently in detached tasks. Use the 
 
 ### Why?
 
-The `Connection` class in Connectable is implemented as an actor, which provides thread-safe access to its mutable state by ensuring only one execution context can access it at a time.
+The `Connection` class in ConnectionKit is implemented as an actor, which provides thread-safe access to its mutable state by ensuring only one execution context can access it at a time.
 
 ### Task vs Task.detached
 

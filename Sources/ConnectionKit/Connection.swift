@@ -20,7 +20,7 @@ public struct DefaultConnectionMemory: ConnectionMemory {
     private let userDefaults: UserDefaults
     private let storageKey: String
     
-    public init(userDefaults: UserDefaults = .standard, storageKey: String = "connectable.connection.state") {
+    public init(userDefaults: UserDefaults = .standard, storageKey: String = "connectionkit.connection.state") {
         self.userDefaults = userDefaults
         self.storageKey = storageKey
     }
@@ -51,6 +51,7 @@ public protocol Connectable {
     /// Get the last remembered connection state
     func rememberedConnectionState() -> Bool
 }
+
 
 /// Live implementation of Connectable using NWPathMonitor
 public final class Connection: Connectable {
@@ -161,7 +162,7 @@ public final class Connection: Connectable {
     ///   - memory: Storage mechanism for connection state persistence
     ///   - autoStart: Whether to automatically start monitoring (default: true)
     public init(
-        queueLabel: String = "com.connectable.queue",
+        queueLabel: String = "com.connectionkit.queue",
         qos: DispatchQoS = .utility,
         memory: ConnectionMemory = DefaultConnectionMemory(),
         autoStart: Bool = true
@@ -351,7 +352,7 @@ public final class Connection: Connectable {
         } catch let error as NSError {
             // Log only non-transient errors for debugging
             if error.code != -1009 && error.code != -1001 {  // -1009: offline, -1001: timeout
-                print("[Connectable] Simulator connectivity check error: \(error.localizedDescription)")
+                print("[ConnectionKit] Simulator connectivity check error: \(error.localizedDescription)")
             }
             return false
         }
@@ -384,3 +385,6 @@ public final class Connection: Connectable {
         stopMonitoring()
     }
 }
+
+/// Alternative name for the Connection class - use when you need to disambiguate from the protocol
+public typealias LiveConnection = Connection

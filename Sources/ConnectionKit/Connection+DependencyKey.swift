@@ -9,7 +9,7 @@ import Dependencies
 /// Create a wrapper to act as the DependencyKey
 public enum ConnectableKey: DependencyKey {
     public static var liveValue: Connectable {
-        Connection()
+        LiveConnection()
     }
     
     public static var testValue: Connectable {

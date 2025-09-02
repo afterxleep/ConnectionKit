@@ -3,9 +3,9 @@
 import XCTest
 import Combine
 import Network
-@testable import Connectable
+@testable import ConnectionKit
 
-final class ConnectableTests: XCTestCase {
+final class ConnectionKitTests: XCTestCase {
     
     private var cancellables = Set<AnyCancellable>()
     
