@@ -65,6 +65,8 @@ public final class Connection: Connectable {
     private var _currentConnectionState: Bool = false
     private var _currentPath: NWPath?
     private var _hasEmittedInitialState = false
+    private var lastStableState: Bool? = nil
+    private var consecutiveStateCount: Int = 0
     
     /// Subject for Combine integration - will be initialized with correct initial state
     private var stateSubject: CurrentValueSubject<Bool, Never>?
@@ -266,9 +268,9 @@ public final class Connection: Connectable {
     private func startSimulatorFallback() {
         // Start with immediate check
         checkSimulatorNetworkState()
-        
-        // Then check every 2 seconds
-        simulatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+
+        // Check every 5 seconds to avoid overlapping with timeout
+        simulatorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.checkSimulatorNetworkState()
         }
     }
@@ -277,48 +279,64 @@ public final class Connection: Connectable {
     private func checkSimulatorNetworkState() {
         Task { [weak self] in
             guard let self = self else { return }
-            
+
             // Perform connectivity check
             let isConnected = await self.performSimulatorConnectivityCheck()
-            
-            // Update state
+
+            // Update state with debouncing
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
-                
+
                 self.lock.lock()
                 let previousState = self._currentConnectionState
                 let hasEmittedInitial = self._hasEmittedInitialState
-                self._currentConnectionState = isConnected
-                
-                if !hasEmittedInitial {
-                    // First time - emit initial state
-                    self._hasEmittedInitialState = true
-                    self.stateSubject = CurrentValueSubject<Bool, Never>(isConnected)
-                    self.lock.unlock()
-                    
-                    // Save to memory
-                    self.memory.saveConnectionState(isConnected)
+
+                // Debouncing logic: require 2 consecutive same states before changing
+                if isConnected == self.lastStableState {
+                    self.consecutiveStateCount += 1
                 } else {
-                    // Check if state changed
-                    let stateChanged = previousState != isConnected
-                    self.lock.unlock()
-                    
-                    if stateChanged {
-                        // State changed - update everything
-                        self.lock.lock()
-                        let subject = self.stateSubject
+                    self.lastStableState = isConnected
+                    self.consecutiveStateCount = 1
+                }
+
+                // Only update state after 2 consecutive same readings (or immediately for first reading)
+                let shouldUpdateState = !hasEmittedInitial || self.consecutiveStateCount >= 2
+
+                if shouldUpdateState {
+                    self._currentConnectionState = isConnected
+
+                    if !hasEmittedInitial {
+                        // First time - emit initial state
+                        self._hasEmittedInitialState = true
+                        self.stateSubject = CurrentValueSubject<Bool, Never>(isConnected)
                         self.lock.unlock()
-                        
-                        subject?.send(isConnected)
+
+                        // Save to memory
                         self.memory.saveConnectionState(isConnected)
-                        
-                        // Post notification
-                        NotificationCenter.default.post(
-                            name: .connectionStateDidChange,
-                            object: self,
-                            userInfo: ["isConnected": isConnected]
-                        )
+                    } else {
+                        // Check if state changed
+                        let stateChanged = previousState != isConnected
+                        self.lock.unlock()
+
+                        if stateChanged {
+                            // State changed - update everything
+                            self.lock.lock()
+                            let subject = self.stateSubject
+                            self.lock.unlock()
+
+                            subject?.send(isConnected)
+                            self.memory.saveConnectionState(isConnected)
+
+                            // Post notification
+                            NotificationCenter.default.post(
+                                name: .connectionStateDidChange,
+                                object: self,
+                                userInfo: ["isConnected": isConnected]
+                            )
+                        }
                     }
+                } else {
+                    self.lock.unlock()
                 }
             }
         }
@@ -326,37 +344,49 @@ public final class Connection: Connectable {
     
     /// Perform actual network connectivity check for simulator
     private func performSimulatorConnectivityCheck() async -> Bool {
-        // Use a lightweight connectivity check with timeout
-        let url = URL(string: "https://captive.apple.com/hotspot-detect.html")!
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"  // Only get headers, not full content
-        request.timeoutInterval = 3.0  // 3 second timeout
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        
-        // Configure URLSession to handle network transitions better
-        let config = URLSessionConfiguration.ephemeral
-        config.waitsForConnectivity = false  // Don't wait, we want immediate result
-        config.allowsCellularAccess = true
-        config.allowsExpensiveNetworkAccess = true
-        config.allowsConstrainedNetworkAccess = true
-        
-        let session = URLSession(configuration: config)
-        
-        do {
-            let (_, response) = try await session.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse {
-                // Apple's captive portal returns 200 when connected
-                return httpResponse.statusCode == 200
+        // Try multiple times with a shorter timeout to avoid false negatives
+        let maxRetries = 2
+
+        for attempt in 0..<maxRetries {
+            // Use a lightweight connectivity check with shorter timeout
+            let url = URL(string: "https://captive.apple.com/hotspot-detect.html")!
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "HEAD"  // Only get headers, not full content
+            request.timeoutInterval = 3.0  // 3 second timeout for better reliability
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+            // Configure URLSession to handle network transitions better
+            let config = URLSessionConfiguration.ephemeral
+            config.waitsForConnectivity = false  // Don't wait, we want immediate result
+            config.allowsCellularAccess = true
+            config.allowsExpensiveNetworkAccess = true
+            config.allowsConstrainedNetworkAccess = true
+
+            let session = URLSession(configuration: config)
+
+            do {
+                let (_, response) = try await session.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    // Apple's captive portal returns 200 when connected
+                    if httpResponse.statusCode == 200 {
+                        return true  // Success - we're online
+                    }
+                }
+            } catch let error as NSError {
+                // Log only non-transient errors for debugging
+                if error.code != -1009 && error.code != -1001 {  // -1009: offline, -1001: timeout
+                    print("[ConnectionKit] Simulator connectivity check error (attempt \(attempt + 1)): \(error.localizedDescription)")
+                }
+
+                // For timeout errors, try again if we have retries left
+                if error.code == -1001 && attempt < maxRetries - 1 {
+                    continue  // Try again
+                }
             }
-        } catch let error as NSError {
-            // Log only non-transient errors for debugging
-            if error.code != -1009 && error.code != -1001 {  // -1009: offline, -1001: timeout
-                print("[ConnectionKit] Simulator connectivity check error: \(error.localizedDescription)")
-            }
-            return false
         }
-        
+
+        // All attempts failed - we're offline
         return false
     }
     
